@@ -1,16 +1,24 @@
-# This is a sample Python script.
+import uuid
 
-# Press ⌃R to execute it or replace it with your code.
-# Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
+from langchain_core.messages import HumanMessage
+from app.graph import Agent
 
-
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press ⌘F8 to toggle the breakpoint.
-
-
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    print_hi('PyCharm')
+    user_input = input('Enter your travel query: ')
+    agent = Agent()
+    if user_input:
+        try:
+            thread_id = str(uuid.uuid4())
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+            messages = [HumanMessage(content=user_input)]
+            config = {'configurable': {'thread_id': thread_id}}
+
+            result = agent.graph.invoke({'messages': messages}, config=config)
+
+            print('Travel Information:')
+            print(result['messages'][-1].content)
+
+        except Exception as e:
+            print(f'Error: {e}')
+    else:
+        print('Please enter a travel query.')
