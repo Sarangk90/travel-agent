@@ -1,4 +1,4 @@
-# pylint: disable = http-used,print-used,no-self-use
+# pylint: disable = http-used,print-used,no-use
 
 import datetime
 import operator
@@ -38,47 +38,45 @@ TOOLS_SYSTEM_PROMPT = f"""You are a smart travel agency. Use the tools to look u
 TOOLS = [flights_finder, hotels_finder]
 
 
-class Agent:
+@staticmethod
+def exists_action(state: AgentState):
+    result = state['messages'][-1]
+    if len(result.tool_calls) == 0:
+        return END
+    return 'invoke_tools'
 
-    def __init__(self):
-        self._tools = {t.name: t for t in TOOLS}
-        self._tools_llm = ChatOpenAI(model='gpt-4o').bind_tools(TOOLS)
 
-        builder = StateGraph(AgentState)
-        builder.add_node('call_tools_llm', self.call_tools_llm)
-        builder.add_node('invoke_tools', self.invoke_tools)
-        builder.set_entry_point('call_tools_llm')
+def call_tools_llm(state: AgentState):
+    messages = state['messages']
+    messages = [SystemMessage(content=TOOLS_SYSTEM_PROMPT)] + messages
+    message = _tools_llm.invoke(messages)
+    return {'messages': [message]}
 
-        builder.add_conditional_edges('call_tools_llm', Agent.exists_action)
-        builder.add_edge('invoke_tools', 'call_tools_llm')
-        memory = MemorySaver()
-        self.graph = builder.compile(checkpointer=memory)
 
-        print(self.graph.get_graph().draw_mermaid())
+def invoke_tools(state: AgentState):
+    tool_calls = state['messages'][-1].tool_calls
+    results = []
+    for t in tool_calls:
+        print(f'Calling: {t}')
+        if not t['name'] in _tools:  # check for bad tool name from LLM
+            print('\n ....bad tool name....')
+            result = 'bad tool name, retry'  # instruct LLM to retry if bad
+        else:
+            result = _tools[t['name']].invoke(t['args'])
+        results.append(ToolMessage(tool_call_id=t['id'], name=t['name'], content=str(result)))
+    print('Back to the model!')
+    return {'messages': results}
 
-    @staticmethod
-    def exists_action(state: AgentState):
-        result = state['messages'][-1]
-        if len(result.tool_calls) == 0:
-            return END
-        return 'invoke_tools'
 
-    def call_tools_llm(self, state: AgentState):
-        messages = state['messages']
-        messages = [SystemMessage(content=TOOLS_SYSTEM_PROMPT)] + messages
-        message = self._tools_llm.invoke(messages)
-        return {'messages': [message]}
+_tools = {t.name: t for t in TOOLS}
+_tools_llm = ChatOpenAI(model='gpt-4o').bind_tools(TOOLS)
 
-    def invoke_tools(self, state: AgentState):
-        tool_calls = state['messages'][-1].tool_calls
-        results = []
-        for t in tool_calls:
-            print(f'Calling: {t}')
-            if not t['name'] in self._tools:  # check for bad tool name from LLM
-                print('\n ....bad tool name....')
-                result = 'bad tool name, retry'  # instruct LLM to retry if bad
-            else:
-                result = self._tools[t['name']].invoke(t['args'])
-            results.append(ToolMessage(tool_call_id=t['id'], name=t['name'], content=str(result)))
-        print('Back to the model!')
-        return {'messages': results}
+builder = StateGraph(AgentState)
+builder.add_node('call_tools_llm', call_tools_llm)
+builder.add_node('invoke_tools', invoke_tools)
+builder.set_entry_point('call_tools_llm')
+
+builder.add_conditional_edges('call_tools_llm', exists_action)
+builder.add_edge('invoke_tools', 'call_tools_llm')
+memory = MemorySaver()
+graph = builder.compile(checkpointer=memory)
