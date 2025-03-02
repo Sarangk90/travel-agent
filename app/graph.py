@@ -15,7 +15,7 @@ _ = load_dotenv()
 
 
 def human_node(
-        state: MessagesState, config
+    state: MessagesState, config
 ) -> Command[Literal["hotel_advisor", "flights_advisor", "human"]]:
     """A node for collecting user input."""
 

@@ -11,8 +11,8 @@ def make_handoff_tool(*, agent_name: str):
 
     @tool(tool_name)
     def handoff_to_agent(
-            state: Annotated[dict, InjectedState],
-            tool_call_id: Annotated[str, InjectedToolCallId],
+        state: Annotated[dict, InjectedState],
+        tool_call_id: Annotated[str, InjectedToolCallId],
     ):
         """Ask another agent for help."""
         print(f"Handing off to {agent_name}...")

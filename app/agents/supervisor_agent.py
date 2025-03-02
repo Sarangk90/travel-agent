@@ -26,12 +26,12 @@ supervisor = create_react_agent(
         "Transfer to only one agent (or tool) at a time, nothing more than one. Sending requests to multiple agents at a time is NOT supported"
         "Be very friendly and helpful to the user. Make sure to provide human-readable response before transferring to another agent. Do NOT transfer to another agent without asking human"
     ),
-    name="supervisor"
+    name="supervisor",
 )
 
 
 def call_supervisor(
-        state: MessagesState,
+    state: MessagesState,
 ) -> Command[Literal["hotel_advisor", "human", "flights_advisor"]]:
     response = supervisor.invoke(state)
     return Command(update=response, goto="human")
