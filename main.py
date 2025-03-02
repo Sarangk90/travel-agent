@@ -1,24 +1,35 @@
 import uuid
 
-from langchain_core.messages import HumanMessage
+from dotenv import load_dotenv, find_dotenv
+
+load_dotenv(find_dotenv())
+from langgraph.types import Command
 
 from app.graph import graph
 
+
+def invoke_graph(user_input: str, thread_id: str):
+    thread_config = {"configurable": {"thread_id": thread_id}}
+    state = graph.get_state({"configurable": {"thread_id": thread_id}})
+    input_data = Command(resume=user_input) if len(state.next) > 0 and state.next[0] == 'human' else {
+        "messages": [
+            {"role": "user", "content": user_input}
+        ]
+    }
+
+    for update in graph.stream(input_data, config=thread_config, stream_mode="updates"):
+        if '__interrupt__' in update:
+            break
+        else:
+            for node_id, value in update.items():
+                if "messages" in value and value["messages"]:
+                    last_message = value["messages"][-1]
+                    if last_message.type == "ai":
+                        print(f"{node_id}: {last_message.content}")
+
+
 if __name__ == '__main__':
-    user_input = input('Enter your travel query: ')
-    if user_input:
-        try:
-            thread_id = str(uuid.uuid4())
-
-            messages = [HumanMessage(content=user_input)]
-            config = {'configurable': {'thread_id': thread_id}}
-
-            result = graph.invoke({'messages': messages}, config=config)
-
-            print('Travel Information:')
-            print(result['messages'][-1].content)
-
-        except Exception as e:
-            print(f'Error: {e}')
-    else:
-        print('Please enter a travel query.')
+    thread_id = uuid.uuid4()
+    while True:
+        user_input = input("Enter your message: ")
+        result = invoke_graph(user_input, thread_id)

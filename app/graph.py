@@ -1,82 +1,53 @@
-# pylint: disable = http-used,print-used,no-use
-
-import datetime
-import operator
-from typing import Annotated, TypedDict
+from typing import Literal
 
 from dotenv import load_dotenv
-from langchain_core.messages import AnyMessage, SystemMessage, ToolMessage
-from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import END, StateGraph
+from langgraph.constants import START
+from langgraph.graph import StateGraph, MessagesState
+from langgraph.types import Command, interrupt
 
-from app.tools.flights_finder import flights_finder
-from app.tools.hotels_finder import hotels_finder
+from app.agents.supervisor_agent import call_supervisor
+from app.agents.flights_advisor_agent import call_flights_advisor
+from app.agents.hotel_advisor_agent import call_hotel_advisor
 
 _ = load_dotenv()
 
-CURRENT_YEAR = datetime.datetime.now().year
+
+def human_node(
+        state: MessagesState, config
+) -> Command[Literal["hotel_advisor", "flights_advisor", "human"]]:
+    """A node for collecting user input."""
+
+    message = state["messages"][-1].content
+    user_input = interrupt(value=message)
+
+    # identify the last active agent
+    # (the last active node before returning to human)
+    langgraph_triggers = config["metadata"]["langgraph_triggers"]
+    if len(langgraph_triggers) != 1:
+        raise AssertionError("Expected exactly 1 trigger in human node")
+
+    active_agent = langgraph_triggers[0].split(":")[1]
+
+    return Command(
+        update={
+            "messages": [
+                HumanMessage(content=user_input),
+            ]
+        },
+        goto=active_agent,
+    )
 
 
-class AgentState(TypedDict):
-    messages: Annotated[list[AnyMessage], operator.add]
+builder = StateGraph(MessagesState)
+builder.add_node("supervisor", call_supervisor)
+builder.add_node("hotel_advisor", call_hotel_advisor)
+builder.add_node("flights_advisor", call_flights_advisor)
 
+builder.add_node("human", human_node)
 
-TOOLS_SYSTEM_PROMPT = f"""You are a smart travel agency. Use the tools to look up information.
-    You are allowed to make multiple calls (either together or in sequence).
-    Only look up information when you are sure of what you want.
-    The current year is {CURRENT_YEAR}.
-    If you need to look up some information before asking a follow up question, you are allowed to do that!
-    I want to have in your output links to hotels websites and flights websites (if possible).
-    I want to have as well the logo of the hotel and the logo of the airline company (if possible).
-    In your output always include the price of the flight and the price of the hotel and the currency as well (if possible).
-    for example for hotels-
-    Rate: $581 per night
-    Total: $3,488
-    """
+builder.add_edge(START, "supervisor")
 
-TOOLS = [flights_finder, hotels_finder]
-
-
-@staticmethod
-def exists_action(state: AgentState):
-    result = state['messages'][-1]
-    if len(result.tool_calls) == 0:
-        return END
-    return 'invoke_tools'
-
-
-def call_tools_llm(state: AgentState):
-    messages = state['messages']
-    messages = [SystemMessage(content=TOOLS_SYSTEM_PROMPT)] + messages
-    message = _tools_llm.invoke(messages)
-    return {'messages': [message]}
-
-
-def invoke_tools(state: AgentState):
-    tool_calls = state['messages'][-1].tool_calls
-    results = []
-    for t in tool_calls:
-        print(f'Calling: {t}')
-        if not t['name'] in _tools:  # check for bad tool name from LLM
-            print('\n ....bad tool name....')
-            result = 'bad tool name, retry'  # instruct LLM to retry if bad
-        else:
-            result = _tools[t['name']].invoke(t['args'])
-        results.append(ToolMessage(tool_call_id=t['id'], name=t['name'], content=str(result)))
-    print('Back to the model!')
-    return {'messages': results}
-
-
-_tools = {t.name: t for t in TOOLS}
-_tools_llm = ChatOpenAI(model='gpt-4o').bind_tools(TOOLS)
-
-builder = StateGraph(AgentState)
-builder.add_node('call_tools_llm', call_tools_llm)
-builder.add_node('invoke_tools', invoke_tools)
-builder.set_entry_point('call_tools_llm')
-
-builder.add_conditional_edges('call_tools_llm', exists_action)
-builder.add_edge('invoke_tools', 'call_tools_llm')
-memory = MemorySaver()
-graph = builder.compile(checkpointer=memory)
+checkpointer = MemorySaver()
+graph = builder.compile(checkpointer=checkpointer)
