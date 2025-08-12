@@ -27,35 +27,30 @@ class FlightsInput(BaseModel):
     outbound_date: str = Field(
         description="Parameter defines the outbound date. The format is YYYY-MM-DD. e.g. 2024-06-22"
     )
-    return_date: Optional[str] = Field(
-        default=None,
-        description="Parameter defines the return date. The format is YYYY-MM-DD. e.g. 2024-06-28",
+    return_date: str = Field(
+        description="Parameter defines the return date. The format is YYYY-MM-DD. e.g. 2024-06-28. Leave empty for one-way flights.",
     )
     adults: int = Field(
-        1, ge=1, description="Parameter defines the number of adults. Default to 1."
+        description="Parameter defines the number of adults. Default to 1.", ge=1
     )
     children: int = Field(
-        0, ge=0, description="Parameter defines the number of children. Default to 0."
+        description="Parameter defines the number of children. Default to 0.", ge=0
     )
     infants_in_seat: int = Field(
-        0,
-        ge=0,
         description="Parameter defines the number of infants in seat. Default to 0.",
+        ge=0,
     )
     infants_on_lap: int = Field(
-        0,
-        ge=0,
         description="Parameter defines the number of infants on lap. Default to 0.",
+        ge=0,
     )
     type: FlightType = Field(
-        FlightType.ROUND_TRIP,
         description="Parameter defines the type of the flights: 1 - Round trip (default), 2 - One way",
     )
     stops: str = Field(
-        "0,1,2,3",
         description="Parameter defines the maximum number of stops. Format: comma-separated values (0,1,2,3)",
     )
-    currency: str = Field("INR", description="Currency for pricing.")
+    currency: str = Field(description="Currency for pricing.")
 
     @field_validator("departure_airport", "arrival_airport")
     @classmethod
@@ -67,7 +62,7 @@ class FlightsInput(BaseModel):
     @field_validator("outbound_date", "return_date")
     @classmethod
     def validate_date_format(cls, v):
-        if not v:
+        if not v or v == "":
             return v
 
         try:
@@ -89,14 +84,14 @@ class FlightsInput(BaseModel):
         return_date = self.return_date
         outbound_date = self.outbound_date
 
-        if flight_type == FlightType.ONE_WAY and return_date:
+        if flight_type == FlightType.ONE_WAY and return_date and return_date != "":
             raise ValueError("Return date should not be provided for one-way flights")
 
-        if flight_type == FlightType.ROUND_TRIP and not return_date:
+        if flight_type == FlightType.ROUND_TRIP and (not return_date or return_date == ""):
             raise ValueError("Return date is required for round-trip flights")
 
         # Verify return date is after outbound date for round trips
-        if flight_type == FlightType.ROUND_TRIP and outbound_date and return_date:
+        if flight_type == FlightType.ROUND_TRIP and outbound_date and return_date and return_date != "":
             outbound = datetime.datetime.strptime(outbound_date, "%Y-%m-%d").date()
             return_d = datetime.datetime.strptime(return_date, "%Y-%m-%d").date()
 
@@ -155,7 +150,7 @@ def find_flights(params: FlightsInput) -> Dict[str, Any]:
             "type": str(int(params.type)),
         }
 
-        if params.type == FlightType.ROUND_TRIP and params.return_date:
+        if params.type == FlightType.ROUND_TRIP and params.return_date and params.return_date != "":
             search_params["return_date"] = params.return_date
 
         # Execute the initial search
@@ -248,7 +243,7 @@ flights_advisor_tools = [
 
 flights_advisor = create_react_agent(
     model=model.bind_tools(
-        flights_advisor_tools, parallel_tool_calls=False, strict=True
+        flights_advisor_tools, parallel_tool_calls=False, strict=False
     ),
     tools=flights_advisor_tools,
     prompt=(

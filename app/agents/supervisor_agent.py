@@ -15,7 +15,7 @@ supervisor_tools = [
 model = ChatOpenAI(model="gpt-4o-2024-08-06")
 
 supervisor = create_react_agent(
-    model=model.bind_tools(supervisor_tools, parallel_tool_calls=False, strict=True),
+    model=model.bind_tools(supervisor_tools, parallel_tool_calls=False, strict=False),
     tools=supervisor_tools,
     prompt=(
         "You are a team supervisor for a travel agency managing a hotel and flights advisor."

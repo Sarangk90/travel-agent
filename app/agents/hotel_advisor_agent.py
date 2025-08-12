@@ -35,19 +35,17 @@ class HotelsInput(BaseModel):
         description="Check-out date. The format is YYYY-MM-DD. e.g. 2024-06-28"
     )
     sort_by: SortingOptions = Field(
-        SortingOptions.RATING_HIGH_TO_LOW,
         description="Parameter is used for sorting the results. Default is sort by highest rating (8). "
         "Options: 0 (recommended), 1 (price low to high), 2 (price high to low), "
         "8 (rating high to low), 16 (popularity)",
     )
-    adults: int = Field(1, ge=1, description="Number of adults. Default to 1.")
-    children: int = Field(0, ge=0, description="Number of children. Default to 0.")
-    rooms: int = Field(1, ge=1, description="Number of rooms. Default to 1.")
-    hotel_class: Optional[str] = Field(
-        None,
-        description='Parameter defines to include only certain hotel class in the results. Format: comma-separated values (e.g. "2,3,4" for 2-4 star hotels)',
+    adults: int = Field(description="Number of adults. Default to 1.", ge=1)
+    children: int = Field(description="Number of children. Default to 0.", ge=0)
+    rooms: int = Field(description="Number of rooms. Default to 1.", ge=1)
+    hotel_class: str = Field(
+        description='Parameter defines to include only certain hotel class in the results. Format: comma-separated values (e.g. "2,3,4" for 2-4 star hotels). Leave empty for all hotel classes.',
     )
-    currency: str = Field("INR", description="Currency for pricing.")
+    currency: str = Field(description="Currency for pricing.")
 
     @field_validator("check_in_date", "check_out_date")
     @classmethod
@@ -71,13 +69,13 @@ class HotelsInput(BaseModel):
     @field_validator("hotel_class")
     @classmethod
     def validate_hotel_class(cls, v):
-        if not v:
+        if not v or v == "":
             return v
 
         classes = v.split(",")
         try:
             for hotel_class in classes:
-                class_int = int(hotel_class)
+                class_int = int(hotel_class.strip())
                 if class_int < 1 or class_int > 5:
                     raise ValueError(
                         f"Hotel class must be between 1 and 5, got {hotel_class}"
@@ -139,7 +137,7 @@ def get_hotel_recommendations(params: HotelsInput) -> Dict[str, Any]:
     }
 
     # Add hotel_class only if it's provided
-    if params.hotel_class:
+    if params.hotel_class and params.hotel_class != "":
         search_params["hotel_class"] = params.hotel_class
 
     try:
@@ -159,7 +157,7 @@ hotel_advisor_tools = [
     make_handoff_tool(agent_name="supervisor"),
 ]
 hotel_advisor = create_react_agent(
-    model=model.bind_tools(hotel_advisor_tools, parallel_tool_calls=False, strict=True),
+    model=model.bind_tools(hotel_advisor_tools, parallel_tool_calls=False, strict=False),
     tools=hotel_advisor_tools,
     prompt=(
         "# Hotel Expert Assistant\n\n"
