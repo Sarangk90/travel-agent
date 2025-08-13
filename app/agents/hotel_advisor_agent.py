@@ -17,7 +17,6 @@ from app.tools.handoff_tool import make_handoff_tool
 class SortingOptions(IntEnum):
     """Enum for hotel sorting options supported by Google Hotels API"""
 
-    RECOMMENDED = 0
     PRICE_LOW_TO_HIGH = 1
     PRICE_HIGH_TO_LOW = 2
     RATING_HIGH_TO_LOW = 8
@@ -36,8 +35,9 @@ class HotelsInput(BaseModel):
     )
     sort_by: SortingOptions = Field(
         description="Parameter is used for sorting the results. Default is sort by highest rating (8). "
-        "Options: 0 (recommended), 1 (price low to high), 2 (price high to low), "
+        "Options: 1 (price low to high), 2 (price high to low), "
         "8 (rating high to low), 16 (popularity)",
+        default=SortingOptions.RATING_HIGH_TO_LOW,
     )
     adults: int = Field(description="Number of adults. Default to 1.", ge=1)
     children: int = Field(description="Number of children. Default to 0.", ge=0)
@@ -144,8 +144,10 @@ def get_hotel_recommendations(params: HotelsInput) -> Dict[str, Any]:
         search = serpapi.search(search_params)
         return search.data.get("properties", {"error": "No properties found"})
     except serpapi.exceptions.SerpApiError as e:
+        print(e)
         return {"error": f"SerpAPI error: {str(e)}"}
     except Exception as e:
+        print(e)
         return {"error": f"An unexpected error occurred: {str(e)}"}
 
 
